@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabase, type Saree } from "@/lib/supabase";
+import { photosOf, supabase, type Saree } from "@/lib/supabase";
 import { SITE, formatPrice } from "@/lib/site";
 
 const BUCKET = "sarees";
@@ -35,9 +35,9 @@ async function uploadPhoto(file: File): Promise<string> {
   return supabase!.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-async function removePhoto(url: string | null) {
-  const path = url?.split(`/${BUCKET}/`)[1];
-  if (path) await supabase!.storage.from(BUCKET).remove([path]);
+async function removePhotos(urls: string[]) {
+  const paths = urls.map((u) => u.split(`/${BUCKET}/`)[1]).filter(Boolean);
+  if (paths.length) await supabase!.storage.from(BUCKET).remove(paths);
 }
 
 export default function AdminPage() {
@@ -60,7 +60,7 @@ export default function AdminPage() {
       <p className="mb-8 text-center text-sm text-muted">Manage Sarees</p>
 
       {!supabase ? (
-        <p className="rounded-xl bg-white p-4 text-center text-sm text-maroon">
+        <p className="rounded-xl bg-white p-4 text-center text-sm text-plum">
           Supabase is not configured yet. Add the two values from .env.example and restart.
         </p>
       ) : !ready ? (
@@ -94,7 +94,7 @@ function Login() {
       <h2 className="font-serif text-2xl font-semibold">Owner Login</h2>
       <input className="field" type="email" placeholder="Email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       <input className="field" type="password" placeholder="Password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-      {error && <p className="text-sm text-maroon">{error}</p>}
+      {error && <p className="text-sm text-plum">{error}</p>}
       <button className="btn w-full !py-3 !text-base" disabled={busy}>
         {busy ? "Logging in…" : "Log In"}
       </button>
@@ -107,13 +107,19 @@ function Manager() {
   const [editing, setEditing] = useState<Saree | null>(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [available, setAvailable] = useState(true);
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [kept, setKept] = useState<string[]>([]); // photos already saved (when editing)
+  const [newPhotos, setNewPhotos] = useState<File[]>([]); // photos chosen now
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const categories = Array.from(
+    new Set(sarees.map((s) => s.category?.trim()).filter((c): c is string => !!c))
+  ).sort();
 
   async function load() {
     const { data } = await supabase!.from("sarees").select("*").order("created_at", { ascending: false });
@@ -128,9 +134,11 @@ function Manager() {
     setEditing(null);
     setName("");
     setPrice("");
+    setCategory("");
     setDescription("");
     setAvailable(true);
-    setPhoto(null);
+    setKept([]);
+    setNewPhotos([]);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -138,33 +146,45 @@ function Manager() {
     setEditing(s);
     setName(s.name);
     setPrice(String(s.price));
+    setCategory(s.category ?? "");
     setDescription(s.description ?? "");
     setAvailable(s.available);
-    setPhoto(null);
+    setKept(photosOf(s));
+    setNewPhotos([]);
     if (fileRef.current) fileRef.current.value = "";
     setMessage("");
     formRef.current?.scrollIntoView({ behavior: "smooth" });
   }
 
+  function choosePhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setNewPhotos((old) => [...old, ...files]);
+    e.target.value = ""; // so more photos can be added afterwards
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing && !photo) return setMessage("Please choose a photo.");
+    if (kept.length + newPhotos.length === 0) return setMessage("Please add at least one photo.");
     setBusy(true);
     setMessage("");
     try {
-      const image_url = photo ? await uploadPhoto(photo) : editing!.image_url;
+      const uploaded: string[] = [];
+      for (const file of newPhotos) uploaded.push(await uploadPhoto(file));
+      const image_urls = [...kept, ...uploaded];
       const row = {
         name: name.trim(),
         price: Math.round(Number(price)),
+        category: category.trim() || null,
         description: description.trim() || null,
         available,
-        image_url,
+        image_url: image_urls[0],
+        image_urls,
       };
       const { error } = editing
         ? await supabase!.from("sarees").update(row).eq("id", editing.id)
         : await supabase!.from("sarees").insert(row);
       if (error) throw error;
-      if (editing && photo) await removePhoto(editing.image_url);
+      if (editing) await removePhotos(photosOf(editing).filter((u) => !kept.includes(u)));
       setMessage(editing ? "Saree updated ✓" : "Saree added ✓");
       resetForm();
       await load();
@@ -183,7 +203,7 @@ function Manager() {
     if (!confirm(`Delete "${s.name}"? This cannot be undone.`)) return;
     const { error } = await supabase!.from("sarees").delete().eq("id", s.id);
     if (error) return setMessage("Could not delete: " + error.message);
-    await removePhoto(s.image_url);
+    await removePhotos(photosOf(s));
     if (editing?.id === s.id) resetForm();
     load();
   }
@@ -203,21 +223,53 @@ function Manager() {
           <input className="field mt-1" type="number" inputMode="numeric" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} />
         </label>
 
+        <div className="text-sm text-muted">
+          <label htmlFor="category">Category (for example Silk, Cotton, Bridal)</label>
+          <input id="category" className="field mt-1" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Type a category" />
+          {categories.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCategory(c)}
+                  className={`rounded-full border px-3 py-1.5 text-sm ${
+                    category.trim() === c ? "border-plum bg-plum text-white" : "border-ink/15 text-ink"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <label className="block text-sm text-muted">
           Description (optional)
           <textarea className="field mt-1" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
 
-        <label className="block text-sm text-muted">
-          Photo {editing && "(leave empty to keep the current photo)"}
-          <input
-            ref={fileRef}
-            className="mt-1 block w-full text-sm text-ink file:mr-3 file:rounded-full file:border-0 file:bg-sand file:px-4 file:py-2.5 file:text-sm file:font-medium"
-            type="file"
-            accept="image/*"
-            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-          />
-        </label>
+        <div className="text-sm text-muted">
+          <p>Photos (the first photo is the main one)</p>
+          {(kept.length > 0 || newPhotos.length > 0) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {kept.map((url) => (
+                <PhotoThumb key={url} src={url} onRemove={() => setKept(kept.filter((u) => u !== url))} />
+              ))}
+              {newPhotos.map((file, i) => (
+                <PhotoThumb
+                  key={file.name + i}
+                  file={file}
+                  onRemove={() => setNewPhotos(newPhotos.filter((_, j) => j !== i))}
+                />
+              ))}
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" multiple onChange={choosePhotos} className="hidden" />
+          <button type="button" onClick={() => fileRef.current?.click()} className="btn-outline mt-2 w-full">
+            + Add Photos
+          </button>
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => setAvailable(true)} className={available ? "btn" : "btn-outline"}>
@@ -236,37 +288,46 @@ function Manager() {
             Cancel
           </button>
         )}
-        {message && <p className="text-center text-sm text-maroon">{message}</p>}
+        {message && <p className="text-center text-sm text-plum">{message}</p>}
       </form>
 
       <section>
         <h2 className="mb-3 font-serif text-2xl font-semibold">Existing Sarees ({sarees.length})</h2>
         {sarees.length === 0 && <p className="text-sm text-muted">No sarees yet. Add your first one above.</p>}
         <ul className="space-y-3">
-          {sarees.map((s) => (
-            <li key={s.id} className="rounded-2xl bg-white p-3 shadow-sm">
-              <div className="flex gap-3">
-                <div className="h-24 w-[72px] shrink-0 overflow-hidden rounded-lg bg-sand">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {s.image_url && <img src={s.image_url} alt="" className="h-full w-full object-cover" />}
+          {sarees.map((s) => {
+            const photos = photosOf(s);
+            return (
+              <li key={s.id} className="rounded-2xl bg-white p-3 shadow-sm">
+                <div className="flex gap-3">
+                  <div className="h-24 w-[72px] shrink-0 overflow-hidden rounded-lg bg-sand">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {photos[0] && <img src={photos[0]} alt="" className="h-full w-full object-cover" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{s.name}</p>
+                    <p className="text-sm text-muted">
+                      {formatPrice(s.price)}
+                      {s.category ? ` · ${s.category}` : ""}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {photos.length} {photos.length === 1 ? "photo" : "photos"}
+                    </p>
+                    <p className={`mt-1 text-xs font-medium tracking-wide ${s.available ? "text-green-700" : "text-plum"}`}>
+                      {s.available ? "AVAILABLE" : "SOLD OUT"}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{s.name}</p>
-                  <p className="text-sm text-muted">{formatPrice(s.price)}</p>
-                  <p className={`mt-1 text-xs font-medium tracking-wide ${s.available ? "text-green-700" : "text-maroon"}`}>
-                    {s.available ? "AVAILABLE" : "SOLD OUT"}
-                  </p>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button onClick={() => startEdit(s)} className="btn-outline">Edit</button>
+                  <button onClick={() => toggle(s)} className="btn-outline">
+                    {s.available ? "Mark Sold Out" : "Mark Available"}
+                  </button>
+                  <button onClick={() => remove(s)} className="btn-outline !border-red-300 !text-red-700">Delete</button>
                 </div>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <button onClick={() => startEdit(s)} className="btn-outline">Edit</button>
-                <button onClick={() => toggle(s)} className="btn-outline">
-                  {s.available ? "Mark Sold Out" : "Mark Available"}
-                </button>
-                <button onClick={() => remove(s)} className="btn-outline !border-maroon/40 !text-maroon">Delete</button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
@@ -276,6 +337,32 @@ function Manager() {
           Log out
         </button>
       </div>
+    </div>
+  );
+}
+
+function PhotoThumb({ src, file, onRemove }: { src?: string; file?: File; onRemove: () => void }) {
+  const [preview, setPreview] = useState(src ?? "");
+
+  useEffect(() => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div className="relative h-24 w-[72px] overflow-hidden rounded-lg bg-sand">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {preview && <img src={preview} alt="" className="h-full w-full object-cover" />}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove photo"
+        className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-ink/80 text-base leading-none text-white"
+      >
+        ×
+      </button>
     </div>
   );
 }

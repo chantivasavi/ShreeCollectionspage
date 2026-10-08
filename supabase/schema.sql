@@ -6,7 +6,9 @@ create table if not exists public.sarees (
   name text not null,
   price integer not null,
   description text,
-  image_url text,
+  category text,
+  image_url text,                          -- cover photo
+  image_urls text[] not null default '{}', -- all photos, cover first
   available boolean not null default true,
   created_at timestamptz not null default now()
 );

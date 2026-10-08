@@ -56,7 +56,8 @@ edit the user in Supabase.
 ## 6. How the owner adds and deletes sarees
 
 1. On her phone, open `your-site.vercel.app/admin` and log in (she stays logged in).
-2. **Add a saree:** fill in the name and price, tap **Photo** to take or choose a picture,
+2. **Add a saree:** fill in the name and price, pick or type a category, tap
+   **+ Add Photos** to choose one or more pictures (the first is the main photo),
    then tap **Add Saree**. It appears on the website straight away.
 3. **Sold out:** tap **Mark Sold Out** on the saree. It shows a SOLD OUT label and the
    Buy Now button is disabled. Tap **Mark Available** to bring it back.
@@ -75,7 +76,8 @@ The business name, WhatsApp number, shipping line and WhatsApp message are all i
 app/page.tsx              Home page (hero, collection, contact)
 app/saree/[id]/page.tsx   Saree detail page
 app/admin/page.tsx        Owner login + manage sarees
-components/               Header, footer, saree grid, Buy Now button
+components/               Header, footer, logo, saree grid, photo gallery, Buy Now button
+public/logo.png           The logo (replace this file to change it)
 lib/site.ts               Business details and WhatsApp links
 lib/supabase.ts           Supabase client and catalogue queries
 supabase/schema.sql       Database + storage setup

@@ -5,11 +5,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ivory: "#FAF6F0",
-        sand: "#EFE7DB",
-        ink: "#2B2320",
-        muted: "#7A6E66",
-        maroon: "#7A1F2B",
+        ivory: "#FCFAF7",
+        sand: "#F1EBE4",
+        ink: "#1F1A1D",
+        muted: "#75696F",
+        plum: "#5B2B82", // taken from the butterfly in the logo
         gold: "#B08D57",
       },
       fontFamily: {

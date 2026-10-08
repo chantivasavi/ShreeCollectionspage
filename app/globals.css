@@ -12,7 +12,7 @@ body {
 
 @layer components {
   .btn {
-    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-maroon px-5 py-2.5 text-sm font-medium tracking-wide text-white transition hover:bg-ink;
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-plum px-5 py-2.5 text-sm font-medium tracking-wide text-white transition hover:bg-ink;
   }
   .btn-outline {
     @apply inline-flex min-h-[44px] items-center justify-center rounded-full border border-ink/20 bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-ink;
@@ -21,6 +21,14 @@ body {
     @apply inline-flex min-h-[44px] cursor-not-allowed items-center justify-center rounded-full bg-sand px-5 py-2.5 text-sm font-medium tracking-wide text-muted;
   }
   .field {
-    @apply w-full rounded-xl border border-ink/15 bg-white px-4 py-3 text-base text-ink outline-none focus:border-maroon;
+    @apply w-full rounded-xl border border-ink/15 bg-white px-4 py-3 text-base text-ink outline-none focus:border-plum;
   }
+}
+
+/* Hide the scrollbar on swipeable rows (photos, categories). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

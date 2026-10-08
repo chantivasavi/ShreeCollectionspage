@@ -5,10 +5,18 @@ export type Saree = {
   name: string;
   price: number;
   description: string | null;
-  image_url: string | null;
+  category: string | null;
+  image_url: string | null; // cover photo (the first one)
+  image_urls: string[] | null; // all photos, cover first
   available: boolean;
   created_at: string;
 };
+
+/** All photos of a saree, cover photo first. */
+export function photosOf(s: Saree): string[] {
+  if (s.image_urls && s.image_urls.length > 0) return s.image_urls;
+  return s.image_url ? [s.image_url] : [];
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
